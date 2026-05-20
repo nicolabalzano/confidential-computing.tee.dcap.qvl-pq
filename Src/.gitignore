@@ -9,4 +9,9 @@ Debug
 Release
 packages
 .vs
-*.o
+**/*.o
+**/*.obj
+**/*.d
+**/*.a
+**/*.so
+**/*.so.*

@@ -223,7 +223,8 @@ timesub(const time_t *const timep, const int_fast32_t offset,
         int    leapdays;
 
         tdelta = tdays / DAYSPERLYEAR;
-        if (tdelta > (time_t)INT_MAX || (TYPE_SIGNED(time_t) && tdelta < (time_t)INT_MIN))
+        if (! ((! TYPE_SIGNED(time_t) || INT_MIN <= tdelta)
+               && tdelta <= INT_MAX))
             return NULL;
         idelta = (int) tdelta;
         if (idelta == 0)
@@ -247,8 +248,6 @@ timesub(const time_t *const timep, const int_fast32_t offset,
     /*
     ** Given the range, we can now fearlessly cast...
     */
-    if (tdays < INT_MIN || tdays > INT_MAX)
-        return NULL;
     idays = (int) tdays;
     rem += offset - corr;
     while (rem < 0) {

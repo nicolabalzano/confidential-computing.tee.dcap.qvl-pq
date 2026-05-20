@@ -63,10 +63,10 @@ public:
     const Ecdsa256BitQuoteV4AuthData& getAuthDataV4() const;
     const std::array<uint8_t, constants::ECDSA_SIGNATURE_BYTE_LEN>& getQeReportSignature() const;
     const EnclaveReport& getQeReport() const;
-    const std::array<uint8_t, constants::ECDSA_PUBKEY_BYTE_LEN>& getAttestKeyData() const;
+    const std::vector<uint8_t>& getAttestKeyData() const;
     const std::vector<uint8_t>& getQeAuthData() const;
     const CertificationData& getCertificationData() const;
-    const std::array<uint8_t, constants::ECDSA_SIGNATURE_BYTE_LEN>& getQuoteSignature() const;
+    const std::vector<uint8_t>& getQuoteSignature() const;
 
 protected:
     Header header{};
@@ -83,10 +83,10 @@ protected:
     Ecdsa256BitQuoteV4AuthData authDataV4{};
     std::array<uint8_t, constants::ECDSA_SIGNATURE_BYTE_LEN> qeReportSignature{};
     EnclaveReport qeReport{};
-    std::array<uint8_t, constants::ECDSA_PUBKEY_BYTE_LEN> attestKeyData{};
+    std::vector<uint8_t> attestKeyData{};
     std::vector<uint8_t> qeAuthData{};
     CertificationData certificationData{};
-    std::array<uint8_t, constants::ECDSA_SIGNATURE_BYTE_LEN> quoteSignature{};
+    std::vector<uint8_t> quoteSignature{};
 
 private:
     std::vector<uint8_t> getDataToSignatureVerification(const std::vector<uint8_t>& rawQuote,

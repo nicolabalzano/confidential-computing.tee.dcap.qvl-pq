@@ -44,10 +44,45 @@
 #include <OpensslHelpers/KeyUtils.h>
 #include <OpensslHelpers/SignatureVerification.h>
 #include <Verifiers/PckCertVerifier.h>
+#include "tdqe_mldsa_adapter.h"
 
 using namespace intel::sgx::dcap::parser::json;
 
 namespace intel::sgx::dcap {
+
+namespace {
+
+bool verifyQuoteAttestationSignature(const Quote& quote)
+{
+    switch (quote.getHeader().attestationKeyType)
+    {
+        case constants::ECDSA_256_WITH_P256_CURVE:
+        {
+            const auto attestKey = crypto::rawToP256PubKey(quote.getAttestKeyData());
+            if(!attestKey)
+            {
+                return false;
+            }
+            return crypto::verifySha256EcdsaSignature(quote.getQuoteSignature(),
+                                                      quote.getSignedData(),
+                                                      *attestKey);
+        }
+        case constants::MLDSA_65:
+            return tdqe_mldsa65_verify(quote.getQuoteSignature().data(),
+                                       quote.getSignedData().data(),
+                                       quote.getSignedData().size(),
+                                       quote.getAttestKeyData().data()) == 0;
+        case constants::MLDSA_87:
+            return tdqe_mldsa87_verify(quote.getQuoteSignature().data(),
+                                       quote.getSignedData().data(),
+                                       quote.getSignedData().size(),
+                                       quote.getAttestKeyData().data()) == 0;
+        default:
+            return false;
+    }
+}
+
+} // namespace
 
 Status QuoteVerifier::verify(const Quote& quote,
                              const dcap::parser::x509::PckCertificate& pckCert,
@@ -300,21 +335,19 @@ Status QuoteVerifier::verify(const Quote& quote,
         }
     }
 
-    const auto attestKey = crypto::rawToP256PubKey(quote.getAttestKeyData());
-    if(!attestKey)
+    if (quote.getAttestKeyData().empty() || quote.getQuoteSignature().empty())
     {
         verificationCollateralInfo.setError();
         return STATUS_UNSUPPORTED_QUOTE_FORMAT;
     }
 
     /// 4.1.2.5.17
-    if (!crypto::verifySha256EcdsaSignature(quote.getQuoteSignature(),
-                                            quote.getSignedData(),
-                                            *attestKey))
+    if (!verifyQuoteAttestationSignature(quote))
     {
-        LOG_ERROR("Quote Signature ({}) cannot be verified with ECDSA Attestation Key ({})",
-                  bytesToHexString(std::vector<uint8_t>(begin(quote.getQuoteSignature()), end(quote.getQuoteSignature()))),
-                  bytesToHexString(std::vector<uint8_t>(begin(quote.getAttestKeyData()), end(quote.getAttestKeyData()))));
+        LOG_ERROR("Quote Signature ({}) cannot be verified with Attestation Key type {} and key material ({})",
+                  bytesToHexString(quote.getQuoteSignature()),
+                  quote.getHeader().attestationKeyType,
+                  bytesToHexString(quote.getAttestKeyData()));
         verificationCollateralInfo.setError();
         return STATUS_INVALID_QUOTE_SIGNATURE;
     }

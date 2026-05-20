@@ -35,8 +35,31 @@
 
 #include <CertVerification/X509Constants.h>
 #include <OpensslHelpers/SignatureVerification.h>
+#include <cstdlib>
+#include <cstring>
+#include <string>
 
 namespace intel { namespace sgx { namespace dcap {
+
+namespace {
+
+bool allowLocalTdqeIdentity(const dcap::parser::json::EnclaveIdentity &enclaveIdentity)
+{
+#ifndef _MSC_VER
+    const char *value = secure_getenv("TDX_MLDSA_ALLOW_LOCAL_TDQE_IDENTITY");
+#else
+    const char *value = getenv("TDX_MLDSA_ALLOW_LOCAL_TDQE_IDENTITY");
+#endif
+    if (value == nullptr || std::strcmp(value, "1") != 0) {
+        return false;
+    }
+
+    const auto& body = enclaveIdentity.getBody();
+    const std::string jsonBody(reinterpret_cast<const char *>(body.data()), body.size());
+    return jsonBody.find("\"localtdqe\":true") != std::string::npos;
+}
+
+} // namespace
 
 EnclaveIdentityVerifier::EnclaveIdentityVerifier()
         : _commonVerifier(new CommonVerifier()),
@@ -57,6 +80,20 @@ Status EnclaveIdentityVerifier::verify(
             const dcap::parser::x509::Certificate &trustedRoot,
             const std::time_t& expirationDate) const
 {
+    if (allowLocalTdqeIdentity(enclaveIdentity))
+    {
+        if (expirationDate > enclaveIdentity.getNextUpdate())
+        {
+            LOG_ERROR("Local TDQE Identity is expired. Expiration date: {}, next update: {}",
+                      logger::timeToString(expirationDate),
+                      logger::timeToString(enclaveIdentity.getNextUpdate()));
+            return STATUS_SGX_ENCLAVE_IDENTITY_EXPIRED;
+        }
+
+        LOG_WARN("Accepting local TDQE identity override without Intel QE identity signature verification.");
+        return STATUS_OK;
+    }
+
     const auto status = _tcbSigningChain->verify(chain, rootCaCrl, trustedRoot);
     if (status != STATUS_OK)
     {

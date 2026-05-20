@@ -34,10 +34,50 @@
 #include "Utils/Logger.h"
 
 #include <algorithm>
+#include <cstddef>
 #include <iterator>
 
 namespace intel { namespace sgx { namespace dcap {
 using namespace constants;
+
+namespace {
+
+size_t getSignatureSizeForAttestationKeyType(uint16_t attestationKeyType)
+{
+    switch (attestationKeyType)
+    {
+        case ECDSA_256_WITH_P256_CURVE:
+            return ECDSA_SIGNATURE_BYTE_LEN;
+        case MLDSA_65:
+            return MLDSA_65_SIGNATURE_BYTE_LEN;
+        case MLDSA_87:
+            return MLDSA_87_SIGNATURE_BYTE_LEN;
+        default:
+            return 0;
+    }
+}
+
+size_t getPubKeySizeForAttestationKeyType(uint16_t attestationKeyType)
+{
+    switch (attestationKeyType)
+    {
+        case ECDSA_256_WITH_P256_CURVE:
+            return ECDSA_PUBKEY_BYTE_LEN;
+        case MLDSA_65:
+            return MLDSA_65_PUBKEY_BYTE_LEN;
+        case MLDSA_87:
+            return MLDSA_87_PUBKEY_BYTE_LEN;
+        default:
+            return 0;
+    }
+}
+
+bool isMldsaAttestationKeyType(uint16_t attestationKeyType)
+{
+    return attestationKeyType == MLDSA_65 || attestationKeyType == MLDSA_87;
+}
+
+} // namespace
 
 bool Quote::parse(const std::vector<uint8_t>& rawQuote)
 {
@@ -172,32 +212,101 @@ bool Quote::parse(const std::vector<uint8_t>& rawQuote)
         }
         qeReportSignature = localQuoteV3Auth.qeReportSignature.signature;
         qeReport = localQuoteV3Auth.qeReport;
-        attestKeyData = localQuoteV3Auth.ecdsaAttestationKey.pubKey;
+        attestKeyData.assign(localQuoteV3Auth.ecdsaAttestationKey.pubKey.begin(),
+                             localQuoteV3Auth.ecdsaAttestationKey.pubKey.end());
         qeAuthData = localQuoteV3Auth.qeAuthData.data;
         certificationData = localQuoteV3Auth.certificationData;
-        quoteSignature = localQuoteV3Auth.ecdsa256BitSignature.signature;
+        quoteSignature.assign(localQuoteV3Auth.ecdsa256BitSignature.signature.begin(),
+                              localQuoteV3Auth.ecdsa256BitSignature.signature.end());
     }
     else if (localHeader.version > constants::QUOTE_VERSION_3)
     {
-        if (!copyAndAdvance(localQuoteV4Auth, from, static_cast<size_t>(localAuthDataSize), rawQuote.end()))
+        if (isMldsaAttestationKeyType(localHeader.attestationKeyType))
         {
-            LOG_ERROR("Can't read QUOTE v4 Auth data. Expected size: {}", localAuthDataSize);
-            return false;
+            const size_t signatureSize = getSignatureSizeForAttestationKeyType(localHeader.attestationKeyType);
+            const size_t pubKeySize = getPubKeySizeForAttestationKeyType(localHeader.attestationKeyType);
+            if (signatureSize == 0 || pubKeySize == 0)
+            {
+                LOG_ERROR("Unsupported ML-DSA attestation key type {}", localHeader.attestationKeyType);
+                return false;
+            }
+            if (static_cast<size_t>(localAuthDataSize) < signatureSize + pubKeySize + sizeof(uint16_t) + sizeof(uint32_t))
+            {
+                LOG_ERROR("Can't read QUOTE v4 ML-DSA Auth data. Expected at least {}, got {}",
+                          signatureSize + pubKeySize + sizeof(uint16_t) + sizeof(uint32_t),
+                          localAuthDataSize);
+                return false;
+            }
+
+            const auto authEnd = std::next(from, static_cast<std::ptrdiff_t>(localAuthDataSize));
+            quoteSignature.assign(from, std::next(from, static_cast<std::ptrdiff_t>(signatureSize)));
+            std::advance(from, static_cast<std::ptrdiff_t>(signatureSize));
+
+            attestKeyData.assign(from, std::next(from, static_cast<std::ptrdiff_t>(pubKeySize)));
+            std::advance(from, static_cast<std::ptrdiff_t>(pubKeySize));
+
+            uint32_t qeCertSize = 0;
+            const auto available = std::distance(from, authEnd);
+            if (available < 0 || static_cast<size_t>(available) < sizeof(uint16_t))
+            {
+                LOG_ERROR("Can't read QE Certification Data size from quote.");
+                return false;
+            }
+            std::advance(from, sizeof(uint16_t));
+            if (!copyAndAdvance(qeCertSize, from, authEnd))
+            {
+                LOG_ERROR("Can't read QE Certification Data size from quote.");
+                return false;
+            }
+            from = std::prev(from, sizeof(uint32_t) + sizeof(uint16_t));
+            if (!copyAndAdvance(localQuoteV4Auth.certificationData, from, qeCertSize + sizeof(uint16_t) + sizeof(uint32_t), authEnd))
+            {
+                LOG_ERROR("Can't read QE Certification Data from quote. Expected size: {}",
+                          qeCertSize + sizeof(uint16_t) + sizeof(uint32_t));
+                return false;
+            }
+            if (from != authEnd)
+            {
+                LOG_ERROR("There is additional, not expected data in quote auth section.");
+                return false;
+            }
+
+            const auto& reportBytes = localQuoteV4Auth.certificationData.data;
+            auto beg = reportBytes.cbegin();
+            QEReportCertificationData qeReportData;
+            if (!qeReportData.insert(beg, reportBytes.cend()))
+            {
+                return false;
+            }
+            qeReportSignature = qeReportData.qeReportSignature.signature;
+            qeReport = qeReportData.qeReport;
+            qeAuthData = qeReportData.qeAuthData.data;
+            certificationData = qeReportData.certificationData;
         }
-        
-        const auto& reportBytes = localQuoteV4Auth.certificationData.data;
-        auto beg = reportBytes.cbegin();
-        QEReportCertificationData qeReportData;
-        if (!qeReportData.insert(beg, reportBytes.cend()))
+        else
         {
-            return false;
+            if (!copyAndAdvance(localQuoteV4Auth, from, static_cast<size_t>(localAuthDataSize), rawQuote.end()))
+            {
+                LOG_ERROR("Can't read QUOTE v4 Auth data. Expected size: {}", localAuthDataSize);
+                return false;
+            }
+
+            const auto& reportBytes = localQuoteV4Auth.certificationData.data;
+            auto beg = reportBytes.cbegin();
+            QEReportCertificationData qeReportData;
+            if (!qeReportData.insert(beg, reportBytes.cend()))
+            {
+                return false;
+            }
+            qeReportSignature = qeReportData.qeReportSignature.signature;
+            qeReport = qeReportData.qeReport;
+            qeAuthData = qeReportData.qeAuthData.data;
+            attestKeyData.assign(localQuoteV4Auth.ecdsaAttestationKey.pubKey.begin(),
+                                 localQuoteV4Auth.ecdsaAttestationKey.pubKey.end());
+            certificationData = qeReportData.certificationData;
+            quoteSignature.assign(localQuoteV4Auth.ecdsa256BitSignature.signature.begin(),
+                                  localQuoteV4Auth.ecdsa256BitSignature.signature.end());
         }
-        qeReportSignature = qeReportData.qeReportSignature.signature;
-        qeReport = qeReportData.qeReport;
-        qeAuthData = qeReportData.qeAuthData.data;
-        attestKeyData = localQuoteV4Auth.ecdsaAttestationKey.pubKey;
-        certificationData = qeReportData.certificationData;
-        quoteSignature = localQuoteV4Auth.ecdsa256BitSignature.signature;
     }
 
     body = localBody;
@@ -349,7 +458,7 @@ const EnclaveReport &Quote::getQeReport() const {
     return qeReport;
 }
 
-const std::array<uint8_t, constants::ECDSA_PUBKEY_BYTE_LEN> &Quote::getAttestKeyData() const {
+const std::vector<uint8_t> &Quote::getAttestKeyData() const {
     return attestKeyData;
 }
 
@@ -361,7 +470,7 @@ const CertificationData &Quote::getCertificationData() const {
     return certificationData;
 }
 
-const std::array<uint8_t, constants::ECDSA_SIGNATURE_BYTE_LEN> &Quote::getQuoteSignature() const {
+const std::vector<uint8_t> &Quote::getQuoteSignature() const {
     return quoteSignature;
 }
 

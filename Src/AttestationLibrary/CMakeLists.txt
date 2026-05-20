@@ -26,7 +26,7 @@
 
 cmake_minimum_required(VERSION 3.12)
 
-project(AttestationLibrary CXX)
+project(AttestationLibrary C CXX)
 
 set(VERSION "1.0.0")
 configure_file("${CMAKE_CURRENT_SOURCE_DIR}/templates/Version.h.in" "${CMAKE_CURRENT_SOURCE_DIR}/src/Version/Version.h" @ONLY)
@@ -66,6 +66,15 @@ file(GLOB SOURCE_FILES src/*.cpp
         include/SgxEcdsaAttestation/*.h
         )
 
+get_filename_component(DCAP_PQ_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../../../" ABSOLUTE)
+set(MLDSA_SOURCE_FILES
+        "${DCAP_PQ_ROOT}/ae/tdqe/tdqe_mldsa_adapter.c"
+        "${DCAP_PQ_ROOT}/ae/pq/mldsa_native_65.c"
+        "${DCAP_PQ_ROOT}/ae/pq/mldsa_native_87.c"
+        )
+
+list(APPEND SOURCE_FILES ${MLDSA_SOURCE_FILES})
+
 add_library(${PROJECT_NAME} SHARED ${SOURCE_FILES})
 add_library(${PROJECT_NAME}Static STATIC ${SOURCE_FILES})
 
@@ -78,6 +87,9 @@ include_directories(
         ${ATTESTATION_PARSERS_API_INCLUDE}
         ${PROJECT_SOURCE_DIR}/include
         ${PROJECT_SOURCE_DIR}/src
+        "${DCAP_PQ_ROOT}/ae/tdqe"
+        "${DCAP_PQ_ROOT}/ae/pq/mldsa-native/mldsa"
+        "${DCAP_PQ_ROOT}/ae/pq/mldsa-native/mldsa/src"
 )
 
 target_link_libraries(${PROJECT_NAME} PRIVATE
@@ -176,7 +188,7 @@ if (BUILD_ENCLAVE)
             "-Wl,--whole-archive -l${TRTS_LIBRARY_NAME} -lsgx_tsgxssl -Wl,--no-whole-archive"
             "-Wl,--start-group -lsgx_pthread -lsgx_tstdc -lsgx_tcxx -lsgx_tsgxssl_crypto -l${TSERVICE_LIBRARY_NAME} -Wl,--end-group"
             "-Wl,-Bstatic -Wl,-Bsymbolic"
-            "-Wl,-eenclave_entry -Wl,--export-dynamic"
+            "-Wl,-pie,-eenclave_entry -Wl,--export-dynamic"
             "-Wl,--defsym,__ImageBase=0"
             "${LDSCRIPT_FLAG}"
             )
