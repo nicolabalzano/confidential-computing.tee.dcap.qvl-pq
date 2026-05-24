@@ -81,8 +81,24 @@ crypto::EVP_PKEY_uptr rawToP256PubKey(const std::array<uint8_t, 64>& rawKey)
 
 crypto::EVP_PKEY_uptr rawToP256PubKey(const std::vector<uint8_t>& rawKey)
 {
+    if (rawKey.size() != 64 && rawKey.size() != 65)
+    {
+        return crypto::make_unique<EVP_PKEY>(nullptr);
+    }
+
     std::array<uint8_t, 64> raw{};
-    std::copy_n(rawKey.begin() + 1, raw.size(), raw.begin()); // skip header byte
+    if (rawKey.size() == 65)
+    {
+        if (rawKey.front() != POINT_CONVERSION_UNCOMPRESSED)
+        {
+            return crypto::make_unique<EVP_PKEY>(nullptr);
+        }
+        std::copy_n(rawKey.begin() + 1, raw.size(), raw.begin()); // skip uncompressed-point prefix
+    }
+    else
+    {
+        std::copy_n(rawKey.begin(), raw.size(), raw.begin()); // raw x||y quote attestation key
+    }
 
     return rawToP256PubKey(raw);
 }
