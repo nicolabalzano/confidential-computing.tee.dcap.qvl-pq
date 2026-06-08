@@ -69,6 +69,7 @@ file(GLOB SOURCE_FILES src/*.cpp
 get_filename_component(DCAP_PQ_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../../../" ABSOLUTE)
 set(MLDSA_SOURCE_FILES
         "${DCAP_PQ_ROOT}/ae/tdqe/tdqe_mldsa_adapter.c"
+        "${DCAP_PQ_ROOT}/ae/pq/mldsa_native_44.c"
         "${DCAP_PQ_ROOT}/ae/pq/mldsa_native_65.c"
         "${DCAP_PQ_ROOT}/ae/pq/mldsa_native_87.c"
         )

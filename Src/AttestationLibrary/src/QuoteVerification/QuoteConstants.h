@@ -49,9 +49,12 @@ const uint16_t QUOTE_VERSION_5 = 5;
 
 const uint16_t ECDSA_256_WITH_P256_CURVE = 2;
 const uint16_t ECDSA_384_WITH_P384_CURVE = 3;
+const uint16_t MLDSA_44 = 4;
 const uint16_t MLDSA_65 = 5;
 const uint16_t MLDSA_87 = 6;
 constexpr size_t ECDSA_P256_SIGNATURE_BYTE_LEN = 64;
+constexpr size_t MLDSA_44_SIGNATURE_BYTE_LEN = 2420;
+constexpr size_t MLDSA_44_PUBKEY_BYTE_LEN = 1312;
 constexpr size_t MLDSA_65_SIGNATURE_BYTE_LEN = 3309;
 constexpr size_t MLDSA_65_PUBKEY_BYTE_LEN = 1952;
 constexpr size_t MLDSA_87_SIGNATURE_BYTE_LEN = 4627;
@@ -79,8 +82,9 @@ const std::array<uint32_t, 4> ALLOWED_BODY_TYPES = {{   BODY_SGX_ENCLAVE_REPORT_
                                                         BODY_TD_REPORT15_TYPE,
                                                         BODY_TD_REPORT15EX_TYPE }};
 const std::array<uint32_t, 2> ALLOWED_TEE_TYPES = {{ TEE_TYPE_SGX, TEE_TYPE_TDX }};
-const std::array<uint16_t, 3> ALLOWED_ATTESTATION_KEY_TYPES = {{
+const std::array<uint16_t, 4> ALLOWED_ATTESTATION_KEY_TYPES = {{
         ECDSA_256_WITH_P256_CURVE,
+        MLDSA_44,
         MLDSA_65,
         MLDSA_87
 }};

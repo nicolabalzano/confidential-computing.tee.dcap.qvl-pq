@@ -48,6 +48,8 @@ size_t getSignatureSizeForAttestationKeyType(uint16_t attestationKeyType)
     {
         case ECDSA_256_WITH_P256_CURVE:
             return ECDSA_SIGNATURE_BYTE_LEN;
+        case MLDSA_44:
+            return MLDSA_44_SIGNATURE_BYTE_LEN;
         case MLDSA_65:
             return MLDSA_65_SIGNATURE_BYTE_LEN;
         case MLDSA_87:
@@ -63,6 +65,8 @@ size_t getPubKeySizeForAttestationKeyType(uint16_t attestationKeyType)
     {
         case ECDSA_256_WITH_P256_CURVE:
             return ECDSA_PUBKEY_BYTE_LEN;
+        case MLDSA_44:
+            return MLDSA_44_PUBKEY_BYTE_LEN;
         case MLDSA_65:
             return MLDSA_65_PUBKEY_BYTE_LEN;
         case MLDSA_87:
@@ -74,7 +78,9 @@ size_t getPubKeySizeForAttestationKeyType(uint16_t attestationKeyType)
 
 bool isMldsaAttestationKeyType(uint16_t attestationKeyType)
 {
-    return attestationKeyType == MLDSA_65 || attestationKeyType == MLDSA_87;
+    return attestationKeyType == MLDSA_44 ||
+           attestationKeyType == MLDSA_65 ||
+           attestationKeyType == MLDSA_87;
 }
 
 } // namespace

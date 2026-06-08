@@ -67,6 +67,11 @@ bool verifyQuoteAttestationSignature(const Quote& quote)
                                                       quote.getSignedData(),
                                                       *attestKey);
         }
+        case constants::MLDSA_44:
+            return tdqe_mldsa44_verify(quote.getQuoteSignature().data(),
+                                       quote.getSignedData().data(),
+                                       quote.getSignedData().size(),
+                                       quote.getAttestKeyData().data()) == 0;
         case constants::MLDSA_65:
             return tdqe_mldsa65_verify(quote.getQuoteSignature().data(),
                                        quote.getSignedData().data(),
